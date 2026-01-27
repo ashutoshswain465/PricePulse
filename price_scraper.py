@@ -39,6 +39,7 @@ print("==================")
 
 # Define the URL to scrape
 # (books.toscrape.com homepage)
+URL = "https://books.toscrape.com/"
 
 
 # Print status message
@@ -46,10 +47,13 @@ print("==================")
 
 # Fetch the webpage
 # (use requests.get() to download the page)
+response = requests.get(URL)
+print(response.status_code)
 
 
 # Parse the HTML content
 # (use BeautifulSoup with 'html.parser')
+
 
 
 # Find all book elements on the page
