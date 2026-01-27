@@ -48,19 +48,23 @@ URL = "https://books.toscrape.com/"
 # Fetch the webpage
 # (use requests.get() to download the page)
 response = requests.get(URL)
-print(response.status_code)
+
+if response.status_code == 200:
+    print("\nScraping book information...")
 
 
 # Parse the HTML content
 # (use BeautifulSoup with 'html.parser')
-
+soup = BeautifulSoup(response.content, "html.parser")
 
 
 # Find all book elements on the page
 # (each book is in an <article> tag with class 'product_pod')
+books = soup.find_all("article", class_="product_pod")
 
 
 # Initialize counter
+counter = 0
 
 
 # Loop through the first 3 books
@@ -80,11 +84,21 @@ print(response.status_code)
 
 
 # Print the book information
+for book in books[:3]:
+    title = book.h3.a["title"]
+    price = book.find("p", class_="price_color").text
+    availability = book.find("p", class_="instock availability").text.strip()
+
+    print("\n" + title)
+    print(price)
+    print(availability)
+    counter = counter + 1
 
 
 # Increment counter
 
 
 # Print completion message
-
+print("\nScraping complete!")
+print("Total books found: " + str(counter))
 
