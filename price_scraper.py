@@ -33,6 +33,8 @@ from bs4 import BeautifulSoup
 
 
 # Print header
+print("Book Price Scraper")
+print("==================")
 
 
 # Define the URL to scrape
