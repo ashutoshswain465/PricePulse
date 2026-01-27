@@ -28,6 +28,8 @@ Use .text to get the text content of an element.
 
 # Import necessary libraries
 # (requests for HTTP, BeautifulSoup for HTML parsing)
+import requests
+from bs4 import BeautifulSoup
 
 
 # Print header
