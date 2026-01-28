@@ -4,7 +4,7 @@ import os
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-print("Book Price Scraper")
+print("Book Price Tracker")
 print("==================\n")
 
 URL = "https://books.toscrape.com/"
@@ -20,7 +20,7 @@ books = soup.find_all("article", class_="product_pod")
 timestamp = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
 scraped_data = []
 
-for book in books[:3]:
+for book in books[:20]:
     title = book.h3.a["title"]
     price_text = book.find("p", class_="price_color").text
     price = float(price_text.replace('£', ''))
