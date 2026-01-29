@@ -46,56 +46,54 @@ def parse(topic):
     return scraped_data
 
 
-def store(book_data, retries=5):
-    for attempt in range(retries):
-        try:
-            with sqlite3.connect("books.db", timeout=10) as conn:
-                ptr = conn.cursor()
-                sql = '''
-                    INSERT INTO books (timestamp, title, price, availability) 
-                    VALUES (:timestamp, :title, :price, :availability)
-                '''
+def store(book_data):
+    try:
+        with sqlite3.connect("books.db", timeout=10) as conn:
+            ptr = conn.cursor()
+            sql = '''
+                INSERT INTO books (timestamp, title, price, availability) 
+                VALUES (:timestamp, :title, :price, :availability)
+            '''
 
-                ptr.executemany(sql, book_data)
-                conn.commit()
-                print(f"{len(book_data)} records entered successfully!")
-        except sqlite3.OperationalError as e:
-            print(f"[Retry {attempt + 1}] SQLite error: {e}")
-            time.sleep(1)
+            ptr.executemany(sql, book_data)
+            conn.commit()
+            print(f"{len(book_data)} records entered successfully!")
+    except sqlite3.OperationalError as e:
+        print(f"[Retry {attempt + 1}] SQLite error: {e}")
+        time.sleep(1)
     raise Exception("Failed to write to database after multiple attempts.")
 
 
-def summary(db_path, retries=5):
-    for attempt in range(retries):
-        try:
-            with sqlite3.connect(db_path) as conn:
-                csr = conn.cursor()
+def summary(db_path):
+    try:
+        with sqlite3.connect(db_path) as conn:
+            csr = conn.cursor()
 
-                query = '''
+            query = '''
+                SELECT 
+                    COUNT(CASE WHEN prev_price IS NULL THEN 1 END) as new_books,
+                    COUNT(CASE WHEN price > prev_price THEN 1 END) as increases,
+                    COUNT(CASE WHEN price < prev_price THEN 1 END) as decreases,
+                    COUNT(CASE WHEN price <> prev_price AND prev_price IS NOT NULL THEN 1 END) as total_changes
+                FROM (
                     SELECT 
-                        COUNT(CASE WHEN prev_price IS NULL THEN 1 END) as new_books,
-                        COUNT(CASE WHEN price > prev_price THEN 1 END) as increases,
-                        COUNT(CASE WHEN price < prev_price THEN 1 END) as decreases,
-                        COUNT(CASE WHEN price <> prev_price AND prev_price IS NOT NULL THEN 1 END) as total_changes
-                    FROM (
-                        SELECT 
-                            price,
-                            LAG(price) OVER (PARTITION BY book_name ORDER BY timestamp) as prev_price
-                        FROM books
-                    )
-                '''
+                        price,
+                        LAG(price) OVER (PARTITION BY book_name ORDER BY timestamp) as prev_price
+                    FROM books
+                )
+            '''
 
-                csr.execute(query)
-                new_books, increased, decreased, total_changes = csr.fetchone()
+            csr.execute(query)
+            new_books, increased, decreased, total_changes = csr.fetchone()
 
-                print("--- Complete Database Summary ---")
-                print(f"New Books Added: {new_books}")
-                print(f"Total Price Changes: {total_changes}")
-                print(f"Increases: {increased}")
-                print(f"Decreases: {decreased}")
-        except sqlite3.OperationalError as e:
-            print(f"[Retry {attempt + 1}] SQLite error: {e}")
-            time.sleep(1)
+            print("--- Complete Database Summary ---")
+            print(f"New Books Added: {new_books}")
+            print(f"Total Price Changes: {total_changes}")
+            print(f"Increases: {increased}")
+            print(f"Decreases: {decreased}")
+    except sqlite3.OperationalError as e:
+        print(f"[Retry {attempt + 1}] SQLite error: {e}")
+        time.sleep(1)
     raise Exception("Failed to write to database after multiple attempts.")
 
 
