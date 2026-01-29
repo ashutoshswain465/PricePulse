@@ -59,9 +59,9 @@ def store(book_data):
             conn.commit()
             print(f"{len(book_data)} records entered successfully!")
     except sqlite3.OperationalError as e:
-        print(f"[Retry {attempt + 1}] SQLite error: {e}")
+        print(f"SQLite error: {e}")
         time.sleep(1)
-    raise Exception("Failed to write to database after multiple attempts.")
+    raise Exception("Failed to write to database.")
 
 
 def summary(db_path):
@@ -92,9 +92,9 @@ def summary(db_path):
             print(f"Increases: {increased}")
             print(f"Decreases: {decreased}")
     except sqlite3.OperationalError as e:
-        print(f"[Retry {attempt + 1}] SQLite error: {e}")
+        print(f"SQLite error: {e}")
         time.sleep(1)
-    raise Exception("Failed to write to database after multiple attempts.")
+    raise Exception("Failed to fetch summary.")
 
 
 if __name__ == "__main__":
