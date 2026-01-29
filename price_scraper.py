@@ -1,8 +1,6 @@
 import requests
 import sqlite3
 import time
-# import csv
-# import os
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -57,11 +55,11 @@ def store(book_data):
 
             ptr.executemany(sql, book_data)
             conn.commit()
-            print(f"{len(book_data)} records entered successfully!")
+            print(f"{len(book_data)} records entered successfully!\n")
     except sqlite3.OperationalError as e:
         print(f"SQLite error: {e}")
         time.sleep(1)
-    raise Exception("Failed to write to database.")
+        raise Exception("Failed to write to database.")
 
 
 def summary(db_path):
@@ -78,7 +76,7 @@ def summary(db_path):
                 FROM (
                     SELECT 
                         price,
-                        LAG(price) OVER (PARTITION BY book_name ORDER BY timestamp) as prev_price
+                        LAG(price) OVER (PARTITION BY title ORDER BY timestamp) as prev_price
                     FROM books
                 )
             '''
@@ -94,7 +92,7 @@ def summary(db_path):
     except sqlite3.OperationalError as e:
         print(f"SQLite error: {e}")
         time.sleep(1)
-    raise Exception("Failed to fetch summary.")
+        raise Exception("Failed to fetch summary.")
 
 
 if __name__ == "__main__":
@@ -113,8 +111,7 @@ if __name__ == "__main__":
     connection.commit()
     connection.close()
 
-    while True:
-        content = scrape(URL)
-        data = parse(content)
-        store(data)
-        summary("books.db")
+    content = scrape(URL)
+    data = parse(content)
+    store(data)
+    summary("books.db")
