@@ -1,5 +1,6 @@
 import requests
 import sqlite3
+import time
 # import csv
 # import os
 from bs4 import BeautifulSoup
@@ -17,12 +18,12 @@ def scrape(url):
     if response.status_code == 200:
         print("Scraping book information...\n")
 
-    content = response.content
-    return content
+    subject = response.content
+    return subject
 
 
-def parse(content):
-    soup = BeautifulSoup(content, "html.parser")
+def parse(topic):
+    soup = BeautifulSoup(topic, "html.parser")
     books = soup.find_all("article", class_="product_pod")
 
     timestamp = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
@@ -45,69 +46,77 @@ def parse(content):
     return scraped_data
 
 
-# response = requests.get(URL)
+def store(book_data, retries=5):
+    for attempt in range(retries):
+        try:
+            with sqlite3.connect("books.db", timeout=10) as conn:
+                ptr = conn.cursor()
+                sql = '''
+                    INSERT INTO books (timestamp, title, price, availability) 
+                    VALUES (:timestamp, :title, :price, :availability)
+                '''
 
-"""if response.status_code == 200:
-    print("Scraping book information...\n")"""
+                ptr.executemany(sql, book_data)
+                conn.commit()
+                print(f"{len(book_data)} records entered successfully!")
+        except sqlite3.OperationalError as e:
+            print(f"[Retry {attempt + 1}] SQLite error: {e}")
+            time.sleep(1)
+    raise Exception("Failed to write to database after multiple attempts.")
 
-"""soup = BeautifulSoup(response.content, "html.parser")
 
-books = soup.find_all("article", class_="product_pod")
+def summary(db_path, retries=5):
+    for attempt in range(retries):
+        try:
+            with sqlite3.connect(db_path) as conn:
+                csr = conn.cursor()
 
-timestamp = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
-scraped_data = []
+                query = '''
+                    SELECT 
+                        COUNT(CASE WHEN prev_price IS NULL THEN 1 END) as new_books,
+                        COUNT(CASE WHEN price > prev_price THEN 1 END) as increases,
+                        COUNT(CASE WHEN price < prev_price THEN 1 END) as decreases,
+                        COUNT(CASE WHEN price <> prev_price AND prev_price IS NOT NULL THEN 1 END) as total_changes
+                    FROM (
+                        SELECT 
+                            price,
+                            LAG(price) OVER (PARTITION BY book_name ORDER BY timestamp) as prev_price
+                        FROM books
+                    )
+                '''
 
-for book in books[:20]:
-    title = book.h3.a["title"]
-    price_text = book.find("p", class_="price_color").text
-    price = float(price_text.replace('£', ''))
-    availability = book.find("p", class_="instock availability").text.strip()
+                csr.execute(query)
+                new_books, increased, decreased, total_changes = csr.fetchone()
 
-    scraped_data.append({
-        'timestamp': timestamp,
-        'title': title,
-        'price': price,
-        'availability': availability
-    })
+                print("--- Complete Database Summary ---")
+                print(f"New Books Added: {new_books}")
+                print(f"Total Price Changes: {total_changes}")
+                print(f"Increases: {increased}")
+                print(f"Decreases: {decreased}")
+        except sqlite3.OperationalError as e:
+            print(f"[Retry {attempt + 1}] SQLite error: {e}")
+            time.sleep(1)
+    raise Exception("Failed to write to database after multiple attempts.")
 
-print(f"Scarped {len(scraped_data)} books successfully!\n")"""
 
-connection = sqlite3.connect("books.db")
-cursor = connection.cursor()
+if __name__ == "__main__":
+    connection = sqlite3.connect("books.db")
+    cursor = connection.cursor()
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS books (
-        id INTEGER PRIMARY KEY,
-        timestamp TIMESTAMP,
-        title TEXT NOT NULL,
-        price DECIMAL(10, 2),
-        availability TEXT
-    )""")
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS books (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            title TEXT NOT NULL,
+            price DECIMAL(10, 2),
+            availability TEXT
+        )""")
 
-connection.commit()
+    connection.commit()
+    connection.close()
 
-# filename = 'books_data.csv'
-# file_exists = os.path.exists(filename)
-
-"""print(f"Saving to {filename}...")
-
-with open(filename, 'a', newline='', encoding='utf-8') as f:
-    writer = csv.DictWriter(f, fieldnames=['timestamp', 'title', 'price', 'availability'])
-
-    if not file_exists:
-        writer.writeheader()
-
-    writer.writerows(scraped_data)
-
-print(f"Data saved with timestamp: {timestamp}\n")
-
-prices = [book['price'] for book in scraped_data]
-
-print("Summary:")
-print("--------")
-print(f"Total books scraped: {len(scraped_data)}")
-print(f"Lowest price: £{min(prices):.2f}")
-print(f"Highest price: £{max(prices):.2f}")
-print(f"Average price: £{sum(prices) / len(prices):.2f}\n")
-
-print(f"Data saved to: {filename}")"""
+    while True:
+        content = scrape(URL)
+        data = parse(content)
+        store(data)
+        summary("books.db")
