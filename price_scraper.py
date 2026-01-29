@@ -1,6 +1,7 @@
 import requests
-import csv
-import os
+import sqlite3
+# import csv
+# import os
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -8,12 +9,48 @@ print("Book Price Tracker")
 print("==================\n")
 
 URL = "https://books.toscrape.com/"
-response = requests.get(URL)
 
-if response.status_code == 200:
-    print("Scraping book information...\n")
 
-soup = BeautifulSoup(response.content, "html.parser")
+def scrape(url):
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        print("Scraping book information...\n")
+
+    content = response.content
+    return content
+
+
+def parse(content):
+    soup = BeautifulSoup(content, "html.parser")
+    books = soup.find_all("article", class_="product_pod")
+
+    timestamp = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
+    scraped_data = []
+
+    for book in books[:20]:
+        title = book.h3.a["title"]
+        price_text = book.find("p", class_="price_color").text
+        price = float(price_text.replace('£', ''))
+        availability = book.find("p", class_="instock availability").text.strip()
+
+        scraped_data.append({
+            'timestamp': timestamp,
+            'title': title,
+            'price': price,
+            'availability': availability
+        })
+
+    print(f"Scarped {len(scraped_data)} books successfully!\n")
+    return scraped_data
+
+
+# response = requests.get(URL)
+
+"""if response.status_code == 200:
+    print("Scraping book information...\n")"""
+
+"""soup = BeautifulSoup(response.content, "html.parser")
 
 books = soup.find_all("article", class_="product_pod")
 
@@ -33,12 +70,26 @@ for book in books[:20]:
         'availability': availability
     })
 
-print(f"Scarped {len(scraped_data)} books successfully!\n")
+print(f"Scarped {len(scraped_data)} books successfully!\n")"""
 
-filename = 'books_data.csv'
-file_exists = os.path.exists(filename)
+connection = sqlite3.connect("books.db")
+cursor = connection.cursor()
 
-print(f"Saving to {filename}...")
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS books (
+        id INTEGER PRIMARY KEY,
+        timestamp TIMESTAMP,
+        title TEXT NOT NULL,
+        price DECIMAL(10, 2),
+        availability TEXT
+    )""")
+
+connection.commit()
+
+# filename = 'books_data.csv'
+# file_exists = os.path.exists(filename)
+
+"""print(f"Saving to {filename}...")
 
 with open(filename, 'a', newline='', encoding='utf-8') as f:
     writer = csv.DictWriter(f, fieldnames=['timestamp', 'title', 'price', 'availability'])
@@ -57,6 +108,6 @@ print("--------")
 print(f"Total books scraped: {len(scraped_data)}")
 print(f"Lowest price: £{min(prices):.2f}")
 print(f"Highest price: £{max(prices):.2f}")
-print(f"Average price: £{sum(prices)/len(prices):.2f}\n")
+print(f"Average price: £{sum(prices) / len(prices):.2f}\n")
 
-print(f"Data saved to: {filename}")
+print(f"Data saved to: {filename}")"""
