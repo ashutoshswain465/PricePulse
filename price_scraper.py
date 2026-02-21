@@ -89,9 +89,9 @@ if deals_found:
         print(f"   Current: £{deal['current_price']:.2f} | Target: £{deal['target_price']:.2f}")
         print(f"   Status: BELOW TARGET! 🎉\n")
 
-    sender_email = os.getenv('SENDER_EMAIL', 'your_email@gmail.com')
-    sender_password = os.getenv('SENDER_PASSWORD', 'your_app_password')
-    recipient_email = os.getenv('RECIPIENT_EMAIL', 'your_email@gmail.com')
+    sender_email = os.getenv('SENDER_EMAIL', 'ashutoshswain465@gmail.com')
+    sender_password = os.getenv('SENDER_PASSWORD', 'bncgypotlzlqgzod')
+    recipient_email = os.getenv('RECIPIENT_EMAIL', 'ashutoshswain465@gmail.com')
 
     print("📧 Sending email alert...")
 
