@@ -1,117 +1,142 @@
 import requests
-import sqlite3
-import time
 from bs4 import BeautifulSoup
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timedelta
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
+from dotenv import load_dotenv
 
-print("Book Price Tracker")
-print("==================\n")
+load_dotenv()
 
-URL = "https://books.toscrape.com/"
+print("Automated Book Price Monitor")
+print("============================\n")
 
+price_targets = {
+    'A Light in the Attic': 50.00,
+    'Tipping the Velvet': 52.00,
+    'Soumission': 52.00
+}
 
-def scrape(url):
-    response = requests.get(url)
+print("Loading price targets...")
+print(f"Monitoring {len(price_targets)} books for price drops\n")
 
-    if response.status_code == 200:
-        print("Scraping book information...\n")
+conn = sqlite3.connect('books.db')
+cursor = conn.cursor()
 
-    subject = response.content
-    return subject
-
-
-def parse(topic):
-    soup = BeautifulSoup(topic, "html.parser")
-    books = soup.find_all("article", class_="product_pod")
-
-    timestamp = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
-    scraped_data = []
-
-    for book in books[:20]:
-        title = book.h3.a["title"]
-        price_text = book.find("p", class_="price_color").text
-        price = float(price_text.replace('£', ''))
-        availability = book.find("p", class_="instock availability").text.strip()
-
-        scraped_data.append({
-            'timestamp': timestamp,
-            'title': title,
-            'price': price,
-            'availability': availability
-        })
-
-    print(f"Scarped {len(scraped_data)} books successfully!\n")
-    return scraped_data
-
-
-def store(book_data):
-    try:
-        with sqlite3.connect("books.db", timeout=10) as conn:
-            ptr = conn.cursor()
-            sql = '''
-                INSERT INTO books (timestamp, title, price, availability) 
-                VALUES (:timestamp, :title, :price, :availability)
-            '''
-
-            ptr.executemany(sql, book_data)
-            conn.commit()
-            print(f"{len(book_data)} records entered successfully!\n")
-    except sqlite3.OperationalError as e:
-        print(f"SQLite error: {e}")
-        time.sleep(1)
-        raise Exception("Failed to write to database.")
-
-
-def summary(db_path):
-    try:
-        with sqlite3.connect(db_path) as conn:
-            csr = conn.cursor()
-
-            query = '''
-                SELECT 
-                    COUNT(CASE WHEN prev_price IS NULL THEN 1 END) as new_books,
-                    COUNT(CASE WHEN price > prev_price THEN 1 END) as increases,
-                    COUNT(CASE WHEN price < prev_price THEN 1 END) as decreases,
-                    COUNT(CASE WHEN price <> prev_price AND prev_price IS NOT NULL THEN 1 END) as total_changes
-                FROM (
-                    SELECT 
-                        price,
-                        LAG(price) OVER (PARTITION BY title ORDER BY timestamp) as prev_price
-                    FROM books
-                )
-            '''
-
-            csr.execute(query)
-            new_books, increased, decreased, total_changes = csr.fetchone()
-
-            print("--- Complete Database Summary ---")
-            print(f"New Books Added: {new_books}")
-            print(f"Total Price Changes: {total_changes}")
-            print(f"Increases: {increased}")
-            print(f"Decreases: {decreased}")
-    except sqlite3.OperationalError as e:
-        print(f"SQLite error: {e}")
-        time.sleep(1)
-        raise Exception("Failed to fetch summary.")
-
-
-if __name__ == "__main__":
-    connection = sqlite3.connect("books.db")
-    cursor = connection.cursor()
-
-    cursor.execute("""
+cursor.execute('''
     CREATE TABLE IF NOT EXISTS books (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            title TEXT NOT NULL,
-            price DECIMAL(10, 2),
-            availability TEXT
-        )""")
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT,
+        title TEXT,
+        price REAL,
+        availability TEXT
+    )
+''')
+conn.commit()
 
-    connection.commit()
-    connection.close()
+url = "http://books.toscrape.com/"
 
-    content = scrape(URL)
-    data = parse(content)
-    store(data)
-    summary("books.db")
+print("Running price check...")
+
+response = requests.get(url)
+soup = BeautifulSoup(response.content, 'html.parser')
+
+books = soup.find_all('article', class_='product_pod')
+
+timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+scraped_data = []
+
+for book in books[:20]:
+    title = book.h3.a['title']
+    price_text = book.find('p', class_='price_color').text
+    price = float(price_text.replace('£', ''))
+    availability = book.find('p', class_='instock availability').text.strip()
+
+    scraped_data.append((timestamp, title, price, availability))
+
+    cursor.execute('''
+        INSERT INTO books (timestamp, title, price, availability)
+        VALUES (?, ?, ?, ?)
+    ''', (timestamp, title, price, availability))
+
+conn.commit()
+conn.close()
+
+print(f"Scraped {len(scraped_data)} books successfully!\n")
+
+print("Checking against your targets...\n")
+
+deals_found = []
+
+for timestamp, title, price, availability in scraped_data:
+    if title in price_targets:
+        target_price = price_targets[title]
+        if price <= target_price:
+            deals_found.append({
+                'title': title,
+                'current_price': price,
+                'target_price': target_price,
+                'savings': target_price - price
+            })
+
+if deals_found:
+    print("🎯 DEALS FOUND!")
+    print("---------------")
+    for deal in deals_found:
+        print(f"✅ {deal['title']}")
+        print(f"   Current: £{deal['current_price']:.2f} | Target: £{deal['target_price']:.2f}")
+        print(f"   Status: BELOW TARGET! 🎉\n")
+
+    sender_email = os.getenv('SENDER_EMAIL', 'your_email@gmail.com')
+    sender_password = os.getenv('SENDER_PASSWORD', 'your_app_password')
+    recipient_email = os.getenv('RECIPIENT_EMAIL', 'your_email@gmail.com')
+
+    print("📧 Sending email alert...")
+
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = recipient_email
+    msg['Subject'] = f"🎯 Price Alert: {len(deals_found)} Books Below Target!"
+
+    email_body = "Hello!\n\n"
+    email_body += f"Great news - we found {len(deals_found)} books below your target prices:\n\n"
+
+    for i, deal in enumerate(deals_found, 1):
+        email_body += f"{i}. {deal['title']}\n"
+        email_body += f"   Current Price: £{deal['current_price']:.2f}\n"
+        email_body += f"   Your Target: £{deal['target_price']:.2f}\n"
+        email_body += f"   Savings: £{deal['savings']:.2f}\n\n"
+
+    email_body += "Happy shopping!"
+
+    msg.attach(MIMEText(email_body, 'plain'))
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.send_message(msg)
+        server.quit()
+        print(f"Email sent to: {recipient_email}\n")
+        email_sent = True
+    except Exception as e:
+        print(f"Email not sent (configure .env file with credentials)\n")
+        email_sent = False
+
+    print("Summary:")
+    print("--------")
+    print(f"Books monitored: {len(price_targets)}")
+    print(f"Deals found: {len(deals_found)}")
+    print(f"Email sent: {'✓' if email_sent else '✗'}\n")
+
+else:
+    print("No deals found - all prices above targets\n")
+    print("Summary:")
+    print("--------")
+    print(f"Books monitored: {len(price_targets)}")
+    print(f"Deals found: 0\n")
+
+next_check = datetime.now() + timedelta(days=1)
+print(f"Next check scheduled for: {next_check.strftime('%Y-%m-%d %H:%M:%S')}")
